@@ -48,6 +48,8 @@ var killtarget sync.Map
 var lenkillget int
 var nkillget int
 
+var nCurrentSpeak int //当前发言的人
+
 func timer() {
 	timer := time.NewTimer(time.Second * 60)
 	go func() {
@@ -457,8 +459,7 @@ func proto9() {
 	redat := &redata{}
 	redat.Cmd = 9
 	log.Println(dat, "dat.Contentdat.Contentdat.Contentdat.Contentdat.Contentdat.Contentdat.Content")
-	redat.Content = calNameandNum(nkillget, "") + "遗言:" + dat.Content
-	nkillget = 0 //初始化,晚上又可以当做标记保存当晚杀人
+	redat.Content = calNameandNum(nkillget, "") + "遗言:" + dat.Content + "\n请从死者右手边开始顺时针发言-"
 
 	jsonStu, err := json.Marshal(redat)
 	if err != nil {
@@ -469,23 +470,88 @@ func proto9() {
 		return true
 	}
 	connList.Range(joinPlayer)
+	proto10()
 }
 
 //死者左手边 顺时针开始发言
 func proto10() {
-	// redat := &redata{}
+	redat := &redata{}
+	redat.Cmd = 10
+	// log.Println(dat, "dat.Contentdat.Contentdat.Contentdat.Contentdat.Contentdat.Contentdat.Content")
+
+	var SpeakOrderList []int
 	// redat.Cmd = 9
 	// redat.Content = calNameandNum(nkillget, "") + "遗言:" + dat.Content
-	// jsonStu, err := json.Marshal(redat)
-	// if err != nil {
-	// 	fmt.Println("生成json字符串错误")
-	// }
-	// joinPlayer := func(k, v interface{}) bool {
-	// 	v.(*conn.TConnection).WritePack(jsonStu)
-	// 	return true
-	// }
-	// connList.Range(joinPlayer)
+	findout := func(k, v interface{}) bool {
+		if k.(int) > nkillget {
+			SpeakOrderList = append(SpeakOrderList, k.(int))
+		}
+		return true
+	}
+	identityList.Range(findout)
+
+	findout2 := func(k, v interface{}) bool {
+		if k.(int) < nkillget {
+			SpeakOrderList = append(SpeakOrderList, k.(int))
+		}
+		return true
+	}
+	identityList.Range(findout2)
+	nkillget = 0 //初始化,晚上又可以当做标记保存当晚杀人
+	for index := 0; index < len(SpeakOrderList); index++ {
+
+		log.Println(SpeakOrderList[index])
+	}
+	for i := 0; i < len(SpeakOrderList); i++ {
+
+		if v, ok := connList.Load(SpeakOrderList[i]); ok {
+			redat.Mark = SpeakOrderList[i] //告诉客户端他是几号
+			redat.Content = "请" + calNameandNum(SpeakOrderList[i], "") + "发言，发言时间为30s"
+			nCurrentSpeak = SpeakOrderList[i] //当前发言的人是xx
+			jsonStu, err := json.Marshal(redat)
+			if err != nil {
+				fmt.Println("生成json字符串错误")
+			}
+			v.(*conn.TConnection).WritePack(jsonStu)
+		}
+
+		timespeak := time.NewTimer(time.Second * 30)
+		//此处在等待channel中的信号，执行此段代码时会阻塞30秒
+		<-timespeak.C
+
+		if v, ok := connList.Load(SpeakOrderList[i]); ok {
+			redat.Mark = SpeakOrderList[i] //告诉客户端他是几号
+			redat.Content = "时间到，" + calNameandNum(nkillget, "") + "发言结束"
+			jsonStu, err := json.Marshal(redat)
+			if err != nil {
+				fmt.Println("生成json字符串错误")
+			}
+			v.(*conn.TConnection).WritePack(jsonStu)
+		}
+	}
+
 }
+
+//白天发言广播
+func proto11() {
+	redat := &redata{}
+	redat.Cmd = 11
+	redat.Content = calNameandNum(dat.Mark, "") + ":" + dat.Content
+
+	jsonStu, err := json.Marshal(redat)
+	if err != nil {
+		fmt.Println("生成json字符串错误")
+	}
+	joinPlayer := func(k, v interface{}) bool {
+		redat.Mark = k.(int) //告诉客户端他是几号
+		v.(*conn.TConnection).WritePack(jsonStu)
+		return true
+	}
+	if nCurrentSpeak == dat.Mark {
+		connList.Range(joinPlayer)
+	}
+}
+
 func main() {
 	pServer := tcpserver.NewTCPServer()
 	nMark = 0
@@ -531,6 +597,8 @@ func main() {
 			break
 		case 9:
 			proto9()
+		case 11:
+			proto11()
 			break
 			// case 2: //广播xxx玩家进入了房间
 

@@ -98,6 +98,11 @@ func (self *TMainForm) OnFormCreate(sender vcl.IObject) {
 			redat.Cmd = 9
 		case 9:
 			self.Memo1.Lines().Add(string(redat.Content))
+		case 10:
+			self.Memo1.Lines().Add(string(redat.Content))
+			redat.Cmd = 11
+		case 11:
+			self.Memo1.Lines().Add(string(redat.Content))
 		default:
 			self.Memo1.Lines().Add("意外的协议")
 		}
